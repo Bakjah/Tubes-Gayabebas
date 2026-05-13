@@ -1,0 +1,365 @@
+/**
+ * PHOTO EDITOR
+ * File: js/editor.js
+ */
+
+class PhotoEditor {
+    constructor() {
+        this.canvas = document.getElementById('editorCanvas');
+        this.ctx = this.canvas?.getContext('2d');
+        this.originalImage = null;
+        this.currentFrame = 'none';
+        this.currentFilter = 'normal';
+        this.textOverlay = '';
+        this.init();
+    }
+
+    init() {
+        if (!this.canvas) return;
+
+        // Load photo
+        this.loadPhoto();
+        
+        // Setup event listeners
+        this.setupFrameButtons();
+        this.setupFilterButtons();
+        this.setupTextInput();
+        this.setupStickerButtons();
+        this.setupSaveButton();
+    }
+
+    /**
+     * Load photo dari URL
+     */
+    loadPhoto() {
+        const photoSrc = document.getElementById('photoSrc');
+        if (!photoSrc) return;
+
+        const img = new Image();
+        img.onload = () => {
+            this.originalImage = img;
+            this.canvas.width = img.width;
+            this.canvas.height = img.height;
+            this.drawPhoto();
+        };
+        img.src = photoSrc.value;
+    }
+
+    /**
+     * Draw photo ke canvas
+     */
+    drawPhoto() {
+        if (!this.originalImage) return;
+
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw image
+        this.ctx.drawImage(this.originalImage, 0, 0);
+
+        // Apply filter
+        this.applyFilter();
+
+        // Draw frame
+        this.drawFrame();
+
+        // Draw text
+        this.drawText();
+    }
+
+    /**
+     * Apply filter ke canvas
+     */
+    applyFilter() {
+        const filterMap = {
+            'normal': 'none',
+            'bw': 'grayscale(100%)',
+            'sepia': 'sepia(100%)',
+            'vintage': 'sepia(60%) saturate(80%)',
+            'bright': 'brightness(1.3) contrast(1.1)',
+            'cool': 'hue-rotate(200deg) saturate(1.2)'
+        };
+
+        this.ctx.filter = filterMap[this.currentFilter] || 'none';
+    }
+
+    /**
+     * Draw frame
+     */
+    drawFrame() {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        switch(this.currentFrame) {
+            case 'polaroid':
+                this.drawPolaroidFrame(w, h);
+                break;
+            case 'birthday':
+                this.drawBirthdayFrame(w, h);
+                break;
+            case 'kawaii':
+                this.drawKawaiiFrame(w, h);
+                break;
+            case 'simple':
+                this.drawSimpleFrame(w, h);
+                break;
+        }
+    }
+
+    /**
+     * Polaroid frame
+     */
+    drawPolaroidFrame(w, h) {
+        const margin = 15;
+        const bottomMargin = 40;
+
+        this.ctx.fillStyle = 'white';
+        this.ctx.fillRect(
+            -margin, -margin,
+            w + (margin * 2), h + margin + bottomMargin
+        );
+
+        // Border
+        this.ctx.strokeStyle = '#ddd';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(
+            -margin, -margin,
+            w + (margin * 2), h + margin + bottomMargin
+        );
+    }
+
+    /**
+     * Birthday frame
+     */
+    drawBirthdayFrame(w, h) {
+        const gradient = this.ctx.createLinearGradient(0, 0, w, h);
+        gradient.addColorStop(0, 'rgba(255, 182, 217, 0.3)');
+        gradient.addColorStop(1, 'rgba(232, 213, 242, 0.3)');
+
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, w, h);
+
+        // Draw border with pattern
+        this.ctx.strokeStyle = '#FFB6D9';
+        this.ctx.lineWidth = 8;
+        this.ctx.strokeRect(4, 4, w - 8, h - 8);
+    }
+
+    /**
+     * Kawaii frame
+     */
+    drawKawaiiFrame(w, h) {
+        const borderWidth = 10;
+        const radius = 15;
+
+        // Rounded border
+        this.ctx.fillStyle = '#E8D5F2';
+        this.roundRect(
+            0, 0, w, h, radius, true, false
+        );
+
+        // Inner border
+        this.ctx.strokeStyle = '#B8E6D5';
+        this.ctx.lineWidth = 2;
+        this.roundRect(
+            4, 4, w - 8, h - 8, radius, false, true
+        );
+
+        // Decorative circles
+        this.ctx.fillStyle = '#FFB6D9';
+        for (let i = 0; i < 4; i++) {
+            const x = i % 2 === 0 ? 20 : w - 20;
+            const y = i < 2 ? 20 : h - 20;
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, 8, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+    }
+
+    /**
+     * Simple frame
+     */
+    drawSimpleFrame(w, h) {
+        this.ctx.strokeStyle = '#333';
+        this.ctx.lineWidth = 3;
+        this.ctx.strokeRect(0, 0, w, h);
+    }
+
+    /**
+     * Helper: draw rounded rectangle
+     */
+    roundRect(x, y, w, h, r, fill = true, stroke = false) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + r, y);
+        this.ctx.lineTo(x + w - r, y);
+        this.ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        this.ctx.lineTo(x + w, y + h - r);
+        this.ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        this.ctx.lineTo(x + r, y + h);
+        this.ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        this.ctx.lineTo(x, y + r);
+        this.ctx.quadraticCurveTo(x, y, x + r, y);
+        this.ctx.closePath();
+
+        if (fill) this.ctx.fill();
+        if (stroke) this.ctx.stroke();
+    }
+
+    /**
+     * Draw text overlay
+     */
+    drawText() {
+        if (!this.textOverlay) return;
+
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        this.ctx.font = 'bold 40px Arial';
+        this.ctx.fillStyle = 'white';
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        this.ctx.shadowBlur = 10;
+        this.ctx.shadowOffsetX = 2;
+        this.ctx.shadowOffsetY = 2;
+
+        this.ctx.fillText(this.textOverlay, w / 2, h - 40);
+    }
+
+    /**
+     * Setup frame buttons
+     */
+    setupFrameButtons() {
+        const frameButtons = document.querySelectorAll('[data-frame]');
+        frameButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                frameButtons.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentFrame = e.target.dataset.frame;
+                this.drawPhoto();
+            });
+        });
+    }
+
+    /**
+     * Setup filter buttons
+     */
+    setupFilterButtons() {
+        const filterButtons = document.querySelectorAll('[data-edit-filter]');
+        filterButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                filterButtons.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentFilter = e.target.dataset.editFilter;
+                this.drawPhoto();
+            });
+        });
+    }
+
+    /**
+     * Setup text input
+     */
+    setupTextInput() {
+        const textInput = document.getElementById('textInput');
+        if (textInput) {
+            textInput.addEventListener('input', (e) => {
+                this.textOverlay = e.target.value;
+                this.drawPhoto();
+            });
+        }
+    }
+
+    /**
+     * Setup sticker buttons
+     */
+    setupStickerButtons() {
+        const stickerButtons = document.querySelectorAll('[data-sticker]');
+        stickerButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const stickerEmoji = e.target.dataset.sticker;
+                const textInput = document.getElementById('textInput');
+                if (textInput) {
+                    textInput.value += ' ' + stickerEmoji;
+                    this.textOverlay = textInput.value;
+                    this.drawPhoto();
+                }
+            });
+        });
+    }
+
+    /**
+     * Setup save button
+     */
+    setupSaveButton() {
+        const saveBtn = document.getElementById('savePhotoBtn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this.savePhoto());
+        }
+    }
+
+    /**
+     * Save edited photo
+     */
+    async savePhoto() {
+        // Convert canvas to blob
+        this.canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('photo', blob);
+            formData.append('frame', this.currentFrame);
+            formData.append('filter', this.currentFilter);
+            formData.append('text', this.textOverlay);
+
+            try {
+                const response = await fetch('upload.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    this.showToast('✅ Foto disimpan!', 'success');
+                    setTimeout(() => {
+                        window.location.href = 'album.php';
+                    }, 1500);
+                } else {
+                    this.showToast(result.error || 'Gagal menyimpan', 'error');
+                }
+            } catch (error) {
+                console.error('Save error:', error);
+                this.showToast('Error menyimpan foto', 'error');
+            }
+        }, 'image/jpeg', 0.95);
+    }
+
+    /**
+     * Show toast
+     */
+    showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        
+        const container = document.getElementById('toastContainer') || this.createToastContainer();
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
+    }
+
+    /**
+     * Create toast container
+     */
+    createToastContainer() {
+        const container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+        return container;
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    new PhotoEditor();
+});

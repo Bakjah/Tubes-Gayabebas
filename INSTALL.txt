@@ -1,0 +1,176 @@
+-- Database Photobooth
+-- Import file ini ke phpmyadmin
+
+CREATE DATABASE IF NOT EXISTS photobooth;
+USE photobooth;
+
+-- ============================================
+-- TABLE: users
+-- ============================================
+CREATE TABLE users (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(100) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  email VARCHAR(100) UNIQUE,
+  role ENUM('user', 'admin') DEFAULT 'user',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_username (username),
+  INDEX idx_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- TABLE: photos
+-- ============================================
+CREATE TABLE photos (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  photo_path VARCHAR(255) NOT NULL,
+  frame_name VARCHAR(50),
+  filter_name VARCHAR(50),
+  text_content VARCHAR(255),
+  sticker_name VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- TABLE: orders (Online Print Orders)
+-- ============================================
+CREATE TABLE orders (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  photo_id INT NOT NULL,
+  customer_name VARCHAR(100) NOT NULL,
+  phone VARCHAR(20) NOT NULL,
+  address VARCHAR(255) NOT NULL,
+  city VARCHAR(100) NOT NULL,
+  province VARCHAR(100) NOT NULL,
+  postal_code VARCHAR(10),
+  note TEXT,
+  print_size VARCHAR(50),
+  paper_type VARCHAR(50),
+  quantity INT DEFAULT 1,
+  total_price DECIMAL(10, 2),
+  payment_status ENUM('pending', 'paid', 'failed', 'expired') DEFAULT 'pending',
+  order_status ENUM('processing', 'shipped', 'completed', 'cancelled') DEFAULT 'processing',
+  midtrans_transaction_id VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_payment_status (payment_status),
+  INDEX idx_order_status (order_status),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- TABLE: offline_orders (Cetak Langsung di Tempat)
+-- ============================================
+CREATE TABLE offline_orders (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  admin_id INT NOT NULL,
+  customer_name VARCHAR(100) NOT NULL,
+  phone VARCHAR(20) NOT NULL,
+  photo_path VARCHAR(255) NOT NULL,
+  print_size VARCHAR(50),
+  paper_type VARCHAR(50),
+  quantity INT DEFAULT 1,
+  total_price DECIMAL(10, 2),
+  payment_status ENUM('pending', 'paid', 'failed') DEFAULT 'pending',
+  order_status ENUM('pending', 'printing', 'completed', 'cancelled') DEFAULT 'pending',
+  midtrans_transaction_id VARCHAR(100),
+  is_printed BOOLEAN DEFAULT FALSE,
+  printed_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_admin_id (admin_id),
+  INDEX idx_payment_status (payment_status),
+  INDEX idx_order_status (order_status),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- TABLE: transactions (Log semua transaksi)
+-- ============================================
+CREATE TABLE transactions (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  order_id INT,
+  offline_order_id INT,
+  transaction_id VARCHAR(100),
+  amount DECIMAL(10, 2),
+  status VARCHAR(50),
+  payment_method VARCHAR(50),
+  response_json LONGTEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
+  FOREIGN KEY (offline_order_id) REFERENCES offline_orders(id) ON DELETE SET NULL,
+  INDEX idx_transaction_id (transaction_id),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- INSERT: Test Data
+-- ============================================
+
+-- User test (password: password123)
+INSERT INTO users (username, email, password, role) VALUES
+('user123', 'user@example.com', '$2y$10$YIjlrJ5QhFvH8WQqQqQ8wu8Q6qQQqQqQqQqQqQqQqQqQqQqQqQqQq', 'user'),
+('admin', 'admin@example.com', '$2y$10$YIjlrJ5QhFvH8WQqQqQ8wu8Q6qQQqQqQqQqQqQqQqQqQqQqQqQqQq', 'admin');
+
+-- Photo samples
+INSERT INTO photos (user_id, photo_path, frame_name, filter_name) VALUES
+(1, 'uploads/sample1.jpg', 'polaroid', 'normal'),
+(1, 'uploads/sample2.jpg', 'birthday', 'sepia');
+
+-- ============================================
+-- TABLE: settings (Untuk konfigurasi harga)
+-- ============================================
+CREATE TABLE settings (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  setting_key VARCHAR(100) UNIQUE NOT NULL,
+  setting_value LONGTEXT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Insert default settings (harga)
+INSERT INTO settings (setting_key, setting_value) VALUES
+('print_price_small', '50000'),
+('print_price_medium', '100000'),
+('print_price_large', '150000'),
+('paper_type_glossy', '0'),
+('paper_type_matte', '10000'),
+('company_name', 'PhotoBooth Studio');
+
+-- ============================================
+-- VIEWS untuk statistik
+-- ============================================
+
+CREATE VIEW user_stats AS
+SELECT 
+  u.id,
+  u.username,
+  COUNT(DISTINCT p.id) as total_photos,
+  COUNT(DISTINCT o.id) as total_orders,
+  COALESCE(SUM(o.total_price), 0) as total_spent
+FROM users u
+LEFT JOIN photos p ON u.id = p.user_id
+LEFT JOIN orders o ON u.id = o.user_id AND o.payment_status = 'paid'
+WHERE u.role = 'user'
+GROUP BY u.id, u.username;
+
+CREATE VIEW admin_dashboard_stats AS
+SELECT 
+  (SELECT COUNT(*) FROM users WHERE role = 'user') as total_users,
+  (SELECT COUNT(*) FROM photos) as total_photos,
+  (SELECT COUNT(*) FROM orders) as total_orders,
+  (SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE payment_status = 'paid') as total_revenue,
+  (SELECT COUNT(*) FROM orders WHERE payment_status = 'paid') as total_paid_orders;
+
+-- ============================================
+-- DONE
+-- ============================================
